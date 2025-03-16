@@ -1,29 +1,35 @@
-const mongoose = require("mongoose");
+const express = require("express");
+const router = express.Router();
+const Stats = require("../models/Stats");
+const authMiddleware = require("../middleware/authMiddleware");
 
-const StatsSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // Link to User model
-  type: { type: String, required: true }, // "steps" or "calories"
+// ✅ POST: Add Stats Data for Logged-in User
+router.post("/", authMiddleware, async (req, res) => {
+  const { type, range, value, date } = req.body;
+  const userId = req.user.id; // Extract userId from JWT token
 
-  daily: [
-    {
-      date: String, // Format: "YYYY-MM-DD"
-      value: Number, // Steps count or Calories burned
-    },
-  ],
+  try {
+    let stats = await Stats.findOne({ userId, type });
 
-  weekly: [
-    {
-      weekStart: String, // Format: "YYYY-MM-DD" (Start of the week)
-      value: Number, // Total steps or calories for the week
-    },
-  ],
+    if (!stats) {
+      stats = new Stats({ userId, type, daily: [], weekly: [], monthly: [] });
+    }
 
-  monthly: [
-    {
-      month: String, // Format: "YYYY-MM"
-      value: Number, // Total steps or calories for the month
-    },
-  ],
+    if (range === "daily") {
+      stats.daily.push({ date, value });
+    } else if (range === "weekly") {
+      stats.weekly.push({ weekStart: date, value });
+    } else if (range === "monthly") {
+      stats.monthly.push({ month: date, value });
+    } else {
+      return res.status(400).json({ error: "Invalid range type" });
+    }
+
+    await stats.save();
+    res.status(201).json({ message: "Data added successfully", stats });
+  } catch (error) {
+    res.status(500).json({ error: "Server Error" });
+  }
 });
 
-module.exports = mongoose.model("Stats", StatsSchema);
+module.exports = router;
